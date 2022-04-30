@@ -1,0 +1,112 @@
+- case: test_maintains_decorated_type_hints
+  main: |
+    from injected import inject, depends
+    from typing_extensions import assert_type
+    from typing import Callable, Tuple
+
+    @inject
+    def a(
+      foo: str = depends(str),
+      bar: int = depends(int),
+    ) -> tuple[str, int]:
+      return foo, bar
+
+    reveal_type(a)  # N: Revealed type is "def (foo: builtins.str =, bar: builtins.int =) -> Tuple[builtins.str, builtins.int]"
+    reveal_type(a())  # N: Revealed type is "Tuple[builtins.str, builtins.int]"
+    a(foo=1)  # E: Argument "foo" to "a" has incompatible type "int"; expected "str"  [arg-type]
+    a(bar="foo")  # E: Argument "bar" to "a" has incompatible type "str"; expected "int"  [arg-type]
+
+- case: test_raises_error_for_provider_return_value_mismatch
+  main: |
+    from injected import inject, depends
+
+    def provides() -> int:
+      return 1
+
+    @inject
+    def a(
+      value: str = depends(provides),  # E: Incompatible default for argument "value" (default has type "int", argument has type "str")  [assignment]
+    ) -> str:
+      return value
+
+- case: test_raises_error_for_wrong_provider_argument_kind
+  main: |
+    from injected import inject, depends
+
+    def provides(a: int = 1, /, b: str = "foo", *, c: tuple = ()) -> int:
+      return a
+
+    @inject
+    def a(
+      value: int = depends(provides, 1, "foo", c=()),
+    ) -> int:
+      return value
+
+    @inject
+    def b(
+      value: int = depends(provides, 1, b="foo", c=()),
+    ) -> int:
+      return value
+
+    @inject
+    def c(
+      value: int = depends(provides, a=1), # E: Unexpected keyword argument "a" for "depends"  [call-arg]
+    ) -> int:
+      return value
+
+    @inject
+    def d(
+      value: int = depends(provides, 1, "foo", ()), # E: Too many positional arguments for "depends"  [misc]
+    ) -> int:
+      return value
+
+- case: test_raises_error_for_incorrect_provider_argument_type
+  main: |
+    from injected import inject, depends
+
+    def provides(v: int) -> int:
+      return v
+
+    @inject
+    def a(
+      value: int = depends(provides, v="foo"),  # E: Argument "v" to "depends" has incompatible type "str"; expected "int"  [arg-type]
+    ) -> int:
+      return value
+
+    @inject
+    def b(
+      value: int = depends(provides, "foo"),  # E: Argument 2 to "depends" has incompatible type "str"; expected "int"  [arg-type]
+    ) -> int:
+      return value
+
+- case: test_raises_error_for_missing_required_provider_argument
+  main: |
+    from injected import inject, depends
+
+    def provides(v: int) -> int:
+      return v
+
+    @inject
+    def a(
+      value: int = depends(provides),  # E: Missing positional argument "v" in call to "depends"  [call-arg]
+    ) -> int:
+      return value
+
+- case: test_raises_error_for_unexpected_provider_argument
+  main: |
+    from injected import inject, depends
+
+    def provides() -> int:
+      return 7
+
+    @inject
+    def a(
+      value: int = depends(provides, arg=1),  # E: Unexpected keyword argument "arg" for "depends"  [call-arg]
+    ) -> int:
+      return value
+
+    @inject
+    def b(
+      value: int = depends(provides, "foo")  # E: Too many arguments for "depends"  [call-arg]
+    ) -> int:
+      return value

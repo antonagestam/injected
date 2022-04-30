@@ -63,6 +63,7 @@ repos:
         additional_dependencies:
           - pytest
           - types-setuptools
+          - immutables
   - repo: https://github.com/mgedmin/check-manifest
     rev: "0.48"
     hooks:
