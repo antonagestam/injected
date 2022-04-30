@@ -6,4 +6,6 @@
     <a href=https://codecov.io/gh/antonagestam/injected><img src=https://codecov.io/gh/antonagestam/injected/branch/main/graph/badge.svg?token=GI8Z76HLYJ/></a>
 </p>
 
-Simple, type-safe dependency injection in idiomatic Python.
+Simple, type-safe dependency injection in idiomatic Python, inspired by [FastAPI].
+
+[FastAPI]: https://fastapi.tiangolo.com/tutorial/dependencies/
