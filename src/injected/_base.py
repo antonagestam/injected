@@ -2,8 +2,10 @@ import inspect
 from dataclasses import dataclass
 from functools import cache
 from typing import Any
+from typing import Awaitable
 from typing import Callable
 from typing import Generic
+from typing import Iterable
 from typing import Iterator
 from typing import Mapping
 from typing import NewType
@@ -12,8 +14,11 @@ from typing import ParamSpec
 from typing import TypeVar
 from typing import cast
 from typing import final
+from typing import overload
 
 from immutables import Map
+
+from ._errors import IllegalAsyncDependency
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -57,7 +62,23 @@ class Dependency(Generic[P]):
 # other hand, we were to annotate the return type of this function as Any, users would
 # not receive type errors when a dependency provider has a return value that isn't
 # compatible with its parameter annotation.
+@overload
+def depends(
+    provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs
+) -> T:
+    ...
+
+
+@overload
 def depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+    ...
+
+
+def depends(
+    provider: Callable[P, T],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T:
     request = Request(
         provider=provider,
         args=tuple(args),  # type: ignore[arg-type]
@@ -81,12 +102,12 @@ def extract_dependencies(dependent: Callable) -> Iterator[Dependency]:
         yield Dependency(request=parameter.default, dependent=dependent)
 
 
-def call_inject(
-    fn: Callable[P, T],
+def resolve_arguments(
+    fn: Callable[P, object],
     context: Mapping[RequestKey, object],
     *args: P.args,
     **kwargs: P.kwargs,
-) -> T:
+) -> inspect.BoundArguments:
     # Inspect the signature of the provider, and replace all Request defaults with
     # resolved values from `context`.
     signature = inspect.signature(fn)
@@ -102,13 +123,33 @@ def call_inject(
     )
     # Bind the given args and kwargs to the signature, and apply the newly assigned
     # default values.
-    bound = replaced.bind(*args, **kwargs)
-    bound.apply_defaults()
-    return fn(*bound.args, **bound.kwargs)
+    bound_arguments = replaced.bind(*args, **kwargs)
+    bound_arguments.apply_defaults()
+    return bound_arguments
 
 
-def inject(fn: Callable[P, T]) -> Callable[P, T]:
-    dependencies = tuple(extract_dependencies(fn))
+def assert_no_async_dependencies(
+    fn: Callable, dependencies: Iterable[Dependency]
+) -> None:
+    async_dependencies = {
+        dependency.request.provider.__name__
+        for dependency in dependencies
+        if inspect.iscoroutinefunction(dependency.request.provider)
+    }
+    if async_dependencies:
+        raise IllegalAsyncDependency(
+            f"Cannot depend on coroutine dependencies (defined with async def) "
+            f"when in a synchronous context. To use async dependencies, "
+            f"@{inject.__name__} must be applied to an async function. "
+            f"({fn.__name__} is not async, but these dependencies are: "
+            f"{async_dependencies})."
+        )
+
+
+def create_sync_wrapper(
+    fn: Callable[P, T], dependencies: Iterable[Dependency]
+) -> Callable[P, T]:
+    assert_no_async_dependencies(fn, dependencies)
 
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
         resolved = Map[RequestKey, object]()
@@ -117,13 +158,59 @@ def inject(fn: Callable[P, T]) -> Callable[P, T]:
             key = request_key(dependency.request)
             if key in resolved:
                 continue
-            result = call_inject(
+            bound_arguments = resolve_arguments(
                 dependency.request.provider,
                 resolved,
                 *dependency.request.args,
                 **dependency.request.kwargs,
             )
+            result = dependency.request.provider(
+                *bound_arguments.args, **bound_arguments.kwargs
+            )
             resolved = resolved.set(key, result)
-        return call_inject(fn, resolved, *args, **kwargs)
+
+        bound_arguments = resolve_arguments(fn, resolved, *args, **kwargs)
+        return fn(*bound_arguments.args, **bound_arguments.kwargs)
 
     return wrapper
+
+
+def create_async_wrapper(
+    fn: Callable[P, Awaitable[T]], dependencies: Iterable[Dependency]
+) -> Callable[P, Awaitable[T]]:
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        resolved = Map[RequestKey, object]()
+
+        for dependency in dependencies:
+            key = request_key(dependency.request)
+            if key in resolved:
+                continue
+            bound_arguments = resolve_arguments(
+                dependency.request.provider,
+                resolved,
+                *dependency.request.args,
+                **dependency.request.kwargs,
+            )
+            task = dependency.request.provider(
+                *bound_arguments.args, **bound_arguments.kwargs
+            )
+            result = await task if inspect.iscoroutine(task) else task
+            resolved = resolved.set(key, result)
+
+        bound_arguments = resolve_arguments(fn, resolved, *args, **kwargs)
+        return await fn(*bound_arguments.args, **bound_arguments.kwargs)
+
+    return wrapper
+
+
+C = TypeVar("C", bound=Callable)
+
+
+def inject(fn: C) -> C:
+    dependencies = tuple(extract_dependencies(fn))
+    return cast(
+        C,
+        create_async_wrapper(fn, dependencies)
+        if inspect.iscoroutinefunction(fn)
+        else create_sync_wrapper(fn, dependencies),
+    )

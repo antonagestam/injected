@@ -8,6 +8,7 @@ from immutables import Map
 from injected import depends
 from injected import inject
 from injected._base import Request
+from injected._errors import IllegalAsyncDependency
 
 
 class TestRequest:
@@ -127,3 +128,140 @@ class TestInjected:
 
         assert dependent(17) == 17
         assert count == 0
+
+    def test_raises_something_something_for_coroutine_dependency(self):
+        async def provider() -> int:
+            return 0
+
+        with pytest.raises(IllegalAsyncDependency):
+
+            @inject
+            def dependent(value: int = depends(provider)) -> int:
+                return value
+
+
+class TestAsyncInjected:
+    async def test_can_resolve_simple_dependency(self):
+        value = 123
+
+        async def provider() -> int:
+            return value
+
+        @inject
+        async def dependent(arg: int = depends(provider)) -> int:
+            return arg
+
+        assert value == await dependent()
+
+    async def test_can_resolve_simple_sync_dependency(self):
+        value = 123
+
+        def provider() -> int:
+            return value
+
+        @inject
+        async def dependent(arg: int = depends(provider)) -> int:
+            return arg
+
+        assert value == await dependent()
+
+    async def test_can_resolve_nested_dependency(self):
+        value = 123
+
+        async def a() -> int:
+            return value
+
+        async def b(provided: int = depends(a)) -> int:
+            return provided
+
+        @inject
+        async def c(provided: int = depends(b)) -> int:
+            return provided
+
+        assert value == await c()
+
+    async def test_can_resolve_nested_sync_dependency(self):
+        value = 123
+
+        def a() -> int:
+            return value
+
+        async def b(provided: int = depends(a)) -> int:
+            return provided
+
+        @inject
+        async def c(provided: int = depends(b)) -> int:
+            return provided
+
+        assert value == await c()
+
+    async def test_can_resolve_sync_dependency_with_nested_async_dependency(self):
+        value = 123
+
+        async def a() -> int:
+            return value
+
+        def b(provided: int = depends(a)) -> int:
+            return provided
+
+        @inject
+        async def c(provided: int = depends(b)) -> int:
+            return provided
+
+        assert value == await c()
+
+    async def test_passes_provider_arguments(self):
+        async def a(value: int) -> int:
+            return value
+
+        async def b(provided: int = depends(a, value=123)) -> int:
+            return provided
+
+        @inject
+        async def c(
+            nested: int = depends(b),
+            plain: int = depends(a, 321),
+        ) -> tuple[int, int]:
+            return nested, plain
+
+        assert await c() == (123, 321)
+
+    async def test_reuses_resolved_value(self):
+        count = 0
+
+        async def counter() -> int:
+            nonlocal count
+            count += 1
+            return count
+
+        async def intermediate(value: int = depends(counter)) -> int:
+            return value
+
+        @inject
+        async def dependent(
+            plain: int = depends(counter),
+            nested: int = depends(intermediate),
+        ) -> tuple[int, int]:
+            return plain, nested
+
+        assert (1, 1) == await dependent()
+
+    async def test_reevaluates_resolved_value_with_differing_args(self):
+        count = 0
+
+        async def counter(arg: object) -> int:
+            nonlocal count
+            count += 1
+            return count
+
+        async def intermediate(value: int = depends(counter, arg=1)) -> int:
+            return value
+
+        @inject
+        async def dependent(
+            plain: int = depends(counter, arg=2),
+            nested: int = depends(intermediate),
+        ) -> tuple[int, int]:
+            return plain, nested
+
+        assert (1, 2) == await dependent()

@@ -16,6 +16,38 @@
     a(foo=1)  # E: Argument "foo" to "a" has incompatible type "int"; expected "str"  [arg-type]
     a(bar="foo")  # E: Argument "bar" to "a" has incompatible type "str"; expected "int"  [arg-type]
 
+- case: test_maintains_type_hints_of_decorated_async_function
+  main: |
+    from injected import inject, depends
+    from typing_extensions import assert_type
+    from typing import Callable, Tuple
+
+    @inject
+    async def a(
+      foo: str = depends(str),
+      bar: int = depends(int),
+    ) -> str:
+      return f"{foo=}, {bar=}"
+
+    async def main() -> None:
+      reveal_type(a)  # N: Revealed type is "def (foo: builtins.str =, bar: builtins.int =) -> typing.Coroutine[Any, Any, builtins.str]"
+      reveal_type(await a())  # N: Revealed type is "builtins.str"
+      await a(foo=1)  # E: Argument "foo" to "a" has incompatible type "int"; expected "str"  [arg-type]
+      await a(bar="foo")  # E: Argument "bar" to "a" has incompatible type "str"; expected "int"  [arg-type]
+
+- case: test_raises_error_for_async_provider_return_value_mismatch
+  main: |
+    from injected import inject, depends
+
+    async def provides() -> int:
+      return 1
+
+    @inject
+    async def a(
+      value: str = depends(provides),  # E: Incompatible default for argument "value" (default has type "int", argument has type "str")  [assignment]
+    ) -> str:
+      return value
+
 - case: test_raises_error_for_provider_return_value_mismatch
   main: |
     from injected import inject, depends
@@ -50,15 +82,20 @@
 
     @inject
     def c(
-      value: int = depends(provides, a=1), # E: Unexpected keyword argument "a" for "depends"  [call-arg]
+      value: int = depends(provides, a=1),
     ) -> int:
       return value
 
     @inject
     def d(
-      value: int = depends(provides, 1, "foo", ()), # E: Too many positional arguments for "depends"  [misc]
+      value: int = depends(provides, 1, "foo", ()),
     ) -> int:
       return value
+  out: |
+    main:20: error: Unexpected keyword argument "a" for "depends"  [call-arg]
+    main:20: error: Argument 1 to "depends" has incompatible type "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], int]"; expected "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], Awaitable[<nothing>]]"  [arg-type]
+    main:26: error: Too many positional arguments for "depends"  [misc]
+    main:26: error: Argument 1 to "depends" has incompatible type "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], int]"; expected "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], Awaitable[<nothing>]]"  [arg-type]
 
 - case: test_raises_error_for_incorrect_provider_argument_type
   main: |
@@ -69,15 +106,20 @@
 
     @inject
     def a(
-      value: int = depends(provides, v="foo"),  # E: Argument "v" to "depends" has incompatible type "str"; expected "int"  [arg-type]
+      value: int = depends(provides, v="foo"),
     ) -> int:
       return value
 
     @inject
     def b(
-      value: int = depends(provides, "foo"),  # E: Argument 2 to "depends" has incompatible type "str"; expected "int"  [arg-type]
+      value: int = depends(provides, "foo"),
     ) -> int:
       return value
+  out: |
+    main:8: error: Argument 1 to "depends" has incompatible type "Callable[[int], int]"; expected "Callable[[int], Awaitable[<nothing>]]"  [arg-type]
+    main:8: error: Argument "v" to "depends" has incompatible type "str"; expected "int"  [arg-type]
+    main:14: error: Argument 1 to "depends" has incompatible type "Callable[[int], int]"; expected "Callable[[int], Awaitable[<nothing>]]"  [arg-type]
+    main:14: error: Argument 2 to "depends" has incompatible type "str"; expected "int"  [arg-type]
 
 - case: test_raises_error_for_missing_required_provider_argument
   main: |
@@ -88,9 +130,12 @@
 
     @inject
     def a(
-      value: int = depends(provides),  # E: Missing positional argument "v" in call to "depends"  [call-arg]
+      value: int = depends(provides),
     ) -> int:
       return value
+  out: |
+    main:8: error: Missing positional argument "v" in call to "depends"  [call-arg]
+    main:8: error: Argument 1 to "depends" has incompatible type "Callable[[int], int]"; expected "Callable[[int], Awaitable[<nothing>]]"  [arg-type]
 
 - case: test_raises_error_for_unexpected_provider_argument
   main: |
@@ -101,12 +146,17 @@
 
     @inject
     def a(
-      value: int = depends(provides, arg=1),  # E: Unexpected keyword argument "arg" for "depends"  [call-arg]
+      value: int = depends(provides, arg=1),
     ) -> int:
       return value
 
     @inject
     def b(
-      value: int = depends(provides, "foo")  # E: Too many arguments for "depends"  [call-arg]
+      value: int = depends(provides, "foo")
     ) -> int:
       return value
+  out: |
+    main:8: error: Unexpected keyword argument "arg" for "depends"  [call-arg]
+    main:8: error: Argument 1 to "depends" has incompatible type "Callable[[], int]"; expected "Callable[[], Awaitable[<nothing>]]"  [arg-type]
+    main:14: error: Too many arguments for "depends"  [call-arg]
+    main:14: error: Argument 1 to "depends" has incompatible type "Callable[[], int]"; expected "Callable[[], Awaitable[<nothing>]]"  [arg-type]

@@ -9,3 +9,4 @@ target-version = ["py310"]
 norecursedirs = ["examples"]
 testpaths = ["tests", "src"]
 addopts = "--mypy-ini-file=setup.cfg --mypy-only-local-stub --doctest-modules"
+asyncio_mode = "auto"
