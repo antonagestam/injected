@@ -1,6 +1,8 @@
 import inspect
 from dataclasses import dataclass
 from functools import cache
+from functools import partial
+from functools import wraps
 from typing import Any
 from typing import Awaitable
 from typing import Callable
@@ -11,6 +13,8 @@ from typing import Mapping
 from typing import NewType
 from typing import NoReturn
 from typing import ParamSpec
+from typing import Sequence
+from typing import TypeAlias
 from typing import TypeVar
 from typing import cast
 from typing import final
@@ -103,10 +107,10 @@ def extract_dependencies(dependent: Callable) -> Iterator[Dependency]:
 
 
 def resolve_arguments(
-    fn: Callable[P, object],
+    fn: Callable,
     context: Mapping[RequestKey, object],
-    *args: P.args,
-    **kwargs: P.kwargs,
+    args: Sequence[object],
+    kwargs: Mapping[str, object],
 ) -> inspect.BoundArguments:
     # Inspect the signature of the provider, and replace all Request defaults with
     # resolved values from `context`.
@@ -140,77 +144,89 @@ def assert_no_async_dependencies(
         raise IllegalAsyncDependency(
             f"Cannot depend on coroutine dependencies (defined with async def) "
             f"when in a synchronous context. To use async dependencies, "
-            f"@{inject.__name__} must be applied to an async function. "
+            f"@{resolver.__name__} must be applied to an async function. "
             f"({fn.__name__} is not async, but these dependencies are: "
             f"{async_dependencies})."
         )
 
 
-def create_sync_wrapper(
-    fn: Callable[P, T], dependencies: Iterable[Dependency]
-) -> Callable[P, T]:
-    assert_no_async_dependencies(fn, dependencies)
-
-    def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        resolved = Map[RequestKey, object]()
-
-        for dependency in dependencies:
-            key = request_key(dependency.request)
-            if key in resolved:
-                continue
-            bound_arguments = resolve_arguments(
-                dependency.request.provider,
-                resolved,
-                *dependency.request.args,
-                **dependency.request.kwargs,
-            )
-            result = dependency.request.provider(
-                *bound_arguments.args, **bound_arguments.kwargs
-            )
-            resolved = resolved.set(key, result)
-
-        bound_arguments = resolve_arguments(fn, resolved, *args, **kwargs)
-        return fn(*bound_arguments.args, **bound_arguments.kwargs)
-
-    return wrapper
-
-
-def create_async_wrapper(
-    fn: Callable[P, Awaitable[T]], dependencies: Iterable[Dependency]
-) -> Callable[P, Awaitable[T]]:
-    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
-        resolved = Map[RequestKey, object]()
-
-        for dependency in dependencies:
-            key = request_key(dependency.request)
-            if key in resolved:
-                continue
-            bound_arguments = resolve_arguments(
-                dependency.request.provider,
-                resolved,
-                *dependency.request.args,
-                **dependency.request.kwargs,
-            )
-            task = dependency.request.provider(
-                *bound_arguments.args, **bound_arguments.kwargs
-            )
-            result = await task if inspect.iscoroutine(task) else task
-            resolved = resolved.set(key, result)
-
-        bound_arguments = resolve_arguments(fn, resolved, *args, **kwargs)
-        return await fn(*bound_arguments.args, **bound_arguments.kwargs)
-
-    return wrapper
-
-
 C = TypeVar("C", bound=Callable)
+KeyContext: TypeAlias = Map[RequestKey, object]
+Context: TypeAlias = Mapping[Callable, object]
 
 
-def inject(fn: C) -> C:
-    dependencies = tuple(extract_dependencies(fn))
-    return cast(
-        C,
-        create_async_wrapper(fn, dependencies)
-        if inspect.iscoroutinefunction(fn)
-        else create_sync_wrapper(fn, dependencies),
+def build_context(context: Context) -> KeyContext:
+    return Map(
+        {
+            request_key(Request(provider=provider, args=(), kwargs=Map())): value
+            for provider, value in context.items()
+        }
     )
+
+
+def seed_context(wrapper: C, context: Context = Map()) -> C:
+    return cast(C, partial(wrapper, __seed_context__=context))
+
+
+def resolver(fn: C) -> C:
+    dependencies = tuple(extract_dependencies(fn))
+
+    if inspect.iscoroutinefunction(fn):
+
+        @wraps(fn)
+        async def wrapper(
+            *args: Sequence[object],
+            __seed_context__: Context = Map(),
+            **kwargs: Mapping[str, object],
+        ) -> object:
+            context = build_context(__seed_context__)
+
+            for dependency in dependencies:
+                key = request_key(dependency.request)
+                if key in context:
+                    continue
+                bound_arguments = resolve_arguments(
+                    dependency.request.provider,
+                    context,
+                    dependency.request.args,
+                    dependency.request.kwargs,
+                )
+                task = dependency.request.provider(
+                    *bound_arguments.args, **bound_arguments.kwargs
+                )
+                result = await task if inspect.iscoroutine(task) else task
+                context = context.set(key, result)
+
+            bound_arguments = resolve_arguments(fn, context, args, kwargs)
+            return await fn(*bound_arguments.args, **bound_arguments.kwargs)
+
+    else:
+        assert_no_async_dependencies(fn, dependencies)
+
+        @wraps(fn)
+        def wrapper(
+            *args: Sequence[object],
+            __seed_context__: Context = Map(),
+            **kwargs: Mapping[str, object],
+        ) -> object:
+            context = build_context(__seed_context__)
+
+            for dependency in dependencies:
+                key = request_key(dependency.request)
+                if key in context:
+                    continue
+                bound_arguments = resolve_arguments(
+                    dependency.request.provider,
+                    context,
+                    dependency.request.args,
+                    dependency.request.kwargs,
+                )
+                result = dependency.request.provider(
+                    *bound_arguments.args, **bound_arguments.kwargs
+                )
+                context = context.set(key, result)
+
+            bound_arguments = resolve_arguments(fn, context, args, kwargs)
+            return fn(*bound_arguments.args, **bound_arguments.kwargs)
+
+    return cast(C, wrapper)

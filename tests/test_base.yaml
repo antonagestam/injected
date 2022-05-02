@@ -1,10 +1,10 @@
 - case: test_maintains_decorated_type_hints
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends
     from typing_extensions import assert_type
     from typing import Callable, Tuple
 
-    @inject
+    @resolver
     def a(
       foo: str = depends(str),
       bar: int = depends(int),
@@ -16,13 +16,38 @@
     a(foo=1)  # E: Argument "foo" to "a" has incompatible type "int"; expected "str"  [arg-type]
     a(bar="foo")  # E: Argument "bar" to "a" has incompatible type "str"; expected "int"  [arg-type]
 
-- case: test_maintains_type_hints_of_decorated_async_function
+- case: test_seeded_resolver_maintains_type_hints
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends, seed_context
     from typing_extensions import assert_type
     from typing import Callable, Tuple
 
-    @inject
+    class Request: ...
+    def get_request() -> Request: ...
+
+    @resolver
+    def a(
+      request: Request = depends(get_request),
+      foo: str = depends(str),
+      bar: int = depends(int),
+    ) -> tuple[str, int, Request]:
+      return foo, bar, request
+
+    context = {get_request: Request()}
+    seeded = seed_context(a, context)
+
+    reveal_type(seeded)  # N: Revealed type is "def (request: main.Request =, foo: builtins.str =, bar: builtins.int =) -> Tuple[builtins.str, builtins.int, main.Request]"
+    reveal_type(seeded())  # N: Revealed type is "Tuple[builtins.str, builtins.int, main.Request]"
+    seeded(foo=1)  # E: Argument "foo" has incompatible type "int"; expected "str"  [arg-type]
+    seeded(bar="foo")  # E: Argument "bar" has incompatible type "str"; expected "int"  [arg-type]
+
+- case: test_maintains_type_hints_of_decorated_async_function
+  main: |
+    from injected import resolver, depends
+    from typing_extensions import assert_type
+    from typing import Callable, Tuple
+
+    @resolver
     async def a(
       foo: str = depends(str),
       bar: int = depends(int),
@@ -37,12 +62,12 @@
 
 - case: test_raises_error_for_async_provider_return_value_mismatch
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends
 
     async def provides() -> int:
       return 1
 
-    @inject
+    @resolver
     async def a(
       value: str = depends(provides),  # E: Incompatible default for argument "value" (default has type "int", argument has type "str")  [assignment]
     ) -> str:
@@ -50,12 +75,12 @@
 
 - case: test_raises_error_for_provider_return_value_mismatch
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends
 
     def provides() -> int:
       return 1
 
-    @inject
+    @resolver
     def a(
       value: str = depends(provides),  # E: Incompatible default for argument "value" (default has type "int", argument has type "str")  [assignment]
     ) -> str:
@@ -63,30 +88,30 @@
 
 - case: test_raises_error_for_wrong_provider_argument_kind
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends
 
     def provides(a: int = 1, /, b: str = "foo", *, c: tuple = ()) -> int:
       return a
 
-    @inject
+    @resolver
     def a(
       value: int = depends(provides, 1, "foo", c=()),
     ) -> int:
       return value
 
-    @inject
+    @resolver
     def b(
       value: int = depends(provides, 1, b="foo", c=()),
     ) -> int:
       return value
 
-    @inject
+    @resolver
     def c(
       value: int = depends(provides, a=1),
     ) -> int:
       return value
 
-    @inject
+    @resolver
     def d(
       value: int = depends(provides, 1, "foo", ()),
     ) -> int:
@@ -99,18 +124,18 @@
 
 - case: test_raises_error_for_incorrect_provider_argument_type
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends
 
     def provides(v: int) -> int:
       return v
 
-    @inject
+    @resolver
     def a(
       value: int = depends(provides, v="foo"),
     ) -> int:
       return value
 
-    @inject
+    @resolver
     def b(
       value: int = depends(provides, "foo"),
     ) -> int:
@@ -123,12 +148,12 @@
 
 - case: test_raises_error_for_missing_required_provider_argument
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends
 
     def provides(v: int) -> int:
       return v
 
-    @inject
+    @resolver
     def a(
       value: int = depends(provides),
     ) -> int:
@@ -139,18 +164,18 @@
 
 - case: test_raises_error_for_unexpected_provider_argument
   main: |
-    from injected import inject, depends
+    from injected import resolver, depends
 
     def provides() -> int:
       return 7
 
-    @inject
+    @resolver
     def a(
       value: int = depends(provides, arg=1),
     ) -> int:
       return value
 
-    @inject
+    @resolver
     def b(
       value: int = depends(provides, "foo")
     ) -> int:
