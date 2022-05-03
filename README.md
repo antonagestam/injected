@@ -65,3 +65,34 @@ seeded = seed_context(calculate_value, {get_global_value: 31})
 def test_can_seed_resolver_context():
     assert seeded() == 44
 ```
+
+#### Async dependencies
+
+The `@resolver` decorator works with both async and non-async functions, with the
+restriction that async dependencies can only be used with an async resolver. An async
+resolver however, can resolve both async and vanilla dependencies.
+
+```python
+import asyncio
+from injected import depends, resolver
+
+
+async def get_a() -> int:
+    return 13
+
+
+def get_b() -> int:
+    return 17
+
+
+@resolver
+async def get_sum(
+    a: int = depends(get_a),
+    b: int = depends(get_b),
+) -> int:
+    return a + b
+
+
+def test_resolves_dependencies():
+    assert asyncio.run(get_sum()) == 30
+```
