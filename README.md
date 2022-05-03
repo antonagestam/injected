@@ -9,3 +9,59 @@ Simple, type-safe dependency injection in idiomatic Python, inspired by
 [FastAPI][fastapi].
 
 [fastapi]: https://fastapi.tiangolo.com/tutorial/dependencies/
+
+#### Injecting dependencies
+
+```python
+from injected import depends, resolver
+
+
+def get_a() -> int:
+    return 13
+
+
+def get_b() -> int:
+    return 17
+
+
+@resolver
+def get_sum(
+    a: int = depends(get_a),
+    b: int = depends(get_b),
+) -> int:
+    return a + b
+
+
+def test_resolves_dependencies():
+    assert get_sum() == 30
+```
+
+#### Seeding the context of a resolver
+
+It's sometimes useful to be able to provide an already resolved value, making it
+available throughout the dependency graph. The canonical example of this is how FastAPI
+makes things like requests and headers available to all dependencies.
+
+To use this pattern, you specify a sentinel function, `get_global_value` in the example
+below, and then specify a resolved value for that in a context passed to
+`seed_context()`.
+
+```python
+from injected import depends, resolver, seed_context
+
+
+def get_global_value() -> int:
+    ...
+
+
+@resolver
+def calculate_value(a: int = depends(get_global_value)) -> int:
+    return a + 13
+
+
+seeded = seed_context(calculate_value, {get_global_value: 31})
+
+
+def test_can_seed_resolver_context():
+    assert seeded() == 44
+```

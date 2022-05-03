@@ -7,6 +7,6 @@ target-version = ["py310"]
 
 [tool.pytest.ini_options]
 norecursedirs = ["examples"]
-testpaths = ["tests", "src"]
+testpaths = ["tests", "src", "README.md"]
 addopts = "--mypy-ini-file=setup.cfg --mypy-only-local-stub --doctest-modules"
 asyncio_mode = "auto"
