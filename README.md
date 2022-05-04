@@ -43,8 +43,7 @@ available throughout the dependency graph. The canonical example of this is how 
 makes things like requests and headers available to all dependencies.
 
 To use this pattern, you specify a sentinel function, `get_global_value` in the example
-below, and then specify a resolved value for that in a context passed to
-`seed_context()`.
+below, and then map it to a resolved value in a context passed to `seed_context()`.
 
 ```python
 from injected import depends, resolver, seed_context
