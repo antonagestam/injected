@@ -3,6 +3,9 @@
 <p align=center>
     <a href=https://github.com/antonagestam/injected/actions?query=workflow%3ACI+branch%3Amain><img src=https://github.com/antonagestam/injected/workflows/CI/badge.svg alt="CI Build Status"></a>
     <a href=https://codecov.io/gh/antonagestam/injected><img src=https://codecov.io/gh/antonagestam/injected/branch/main/graph/badge.svg?token=GI8Z76HLYJ alt="Test coverage report"></a>
+    <br>
+    <a href=https://pypi.org/project/injected/><img src=https://img.shields.io/pypi/v/injected.svg?color=informational&label=PyPI alt="PyPI Package"></a>
+    <a href=https://pypi.org/project/injected/><img src=https://img.shields.io/pypi/pyversions/injected.svg?color=informational&label=Python alt="Python versions"></a>
 </p>
 
 Simple, type-safe dependency injection in idiomatic Python, inspired by
