@@ -4,6 +4,7 @@ on:
     branches:
       - main
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -12,13 +13,13 @@ concurrency:
 jobs:
   lint:
     name: Static analysis
-    uses: less-action/reusables/.github/workflows/pre-commit.yaml@v6
+    uses: less-action/reusables/.github/workflows/pre-commit.yaml@main
     with:
       python-version: "3.10"
 
   check-build:
     name: Check packaging metadata
-    uses: less-action/reusables/.github/workflows/python-test-build.yaml@v6
+    uses: less-action/reusables/.github/workflows/python-test-build.yaml@main
 
   test:
     name: Test
