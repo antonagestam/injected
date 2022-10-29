@@ -110,6 +110,7 @@ class TestInjected:
             return plain, nested
 
         assert (1, 1) == dependent()
+        assert 1 == count
 
     def test_reevaluates_resolved_value_with_differing_args(self):
         count = 0
@@ -130,6 +131,7 @@ class TestInjected:
             return plain, nested
 
         assert (1, 2) == dependent()
+        assert 2 == count
 
     # TODO
     @pytest.mark.xfail
@@ -280,6 +282,7 @@ class TestAsyncInjected:
             return plain, nested
 
         assert (1, 1) == await dependent()
+        assert 1 == count
 
     async def test_reevaluates_resolved_value_with_differing_args(self):
         count = 0
@@ -300,3 +303,4 @@ class TestAsyncInjected:
             return plain, nested
 
         assert (1, 2) == await dependent()
+        assert 2 == count
