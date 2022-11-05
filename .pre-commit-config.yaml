@@ -69,6 +69,7 @@ repos:
     rev: "v0.982"
     hooks:
       - id: mypy
+        pass_filenames: false
         additional_dependencies:
           - pytest
           - types-setuptools
