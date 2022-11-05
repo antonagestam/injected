@@ -143,11 +143,14 @@ class TestInjected:
             count += 1
             return count
 
-        @resolver
-        def dependent(value: int = depends(counter)) -> int:
+        def intermediate(value: int = depends(counter)) -> int:
             return value
 
-        assert dependent(17) == 17
+        @resolver
+        def dependent(value: int = depends(intermediate)) -> int:
+            return value
+
+        assert dependent(-17) == -17
         assert count == 0
 
     def test_raises_illegal_async_dependency_for_coroutine_dependency(self):
