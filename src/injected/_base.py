@@ -1,19 +1,19 @@
 import inspect
+from collections.abc import Awaitable
+from collections.abc import Callable
+from collections.abc import Iterable
+from collections.abc import Iterator
+from collections.abc import Mapping
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cache
 from functools import partial
 from functools import wraps
 from typing import Any
-from typing import Awaitable
-from typing import Callable
 from typing import Generic
-from typing import Iterable
-from typing import Iterator
-from typing import Mapping
 from typing import NewType
 from typing import NoReturn
 from typing import ParamSpec
-from typing import Sequence
 from typing import TypeAlias
 from typing import TypeVar
 from typing import cast
@@ -59,8 +59,8 @@ class Dependency(Generic[P]):
     dependent: Callable
 
 
-# We intentionally lie in the return type here, for a good reason. The returned value is
-# an instance of Request, that we will use later to resolve the dependency of the
+# We intentionally "lie" in the return type here, for a good reason. The returned value
+# is an instance of Request, that we will use later to resolve the dependency of the
 # parameter. If we were to annotate the return type of this function accurately, as
 # Request, it would clash with the expected annotation of the resolved value. If, on the
 # other hand, we were to annotate the return type of this function as Any, users would
@@ -68,13 +68,19 @@ class Dependency(Generic[P]):
 # compatible with its parameter annotation.
 @overload
 def depends(
-    provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs
+    provider: Callable[P, Awaitable[T]],
+    *args: P.args,
+    **kwargs: P.kwargs,
 ) -> T:
     ...
 
 
 @overload
-def depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+def depends(
+    provider: Callable[P, T],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T:
     ...
 
 
@@ -85,8 +91,8 @@ def depends(
 ) -> T:
     request = Request(
         provider=provider,
-        args=tuple(args),  # type: ignore[arg-type]
-        kwargs=Map(kwargs),  # type: ignore[arg-type]
+        args=tuple(args),
+        kwargs=Map(kwargs),
     )
     return cast(T, request)
 
