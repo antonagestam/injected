@@ -1,7 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from operator import eq
 from operator import ne
-from typing import Callable
 
 import pytest
 from immutables import Map
