@@ -181,9 +181,9 @@ def resolver(fn: C) -> C:
 
         @wraps(fn)
         async def wrapper(
-            *args: Sequence[object],
+            *args: object,
             __seed_context__: Context = Map(),
-            **kwargs: Mapping[str, object],
+            **kwargs: object,
         ) -> object:
             context = build_context(__seed_context__)
 
@@ -211,9 +211,9 @@ def resolver(fn: C) -> C:
 
         @wraps(fn)
         def wrapper(
-            *args: Sequence[object],
+            *args: object,
             __seed_context__: Context = Map(),
-            **kwargs: Mapping[str, object],
+            **kwargs: object,
         ) -> object:
             context = build_context(__seed_context__)
 
