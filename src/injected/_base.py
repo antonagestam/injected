@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from collections.abc import Iterator
 from collections.abc import Mapping
 from collections.abc import Sequence
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from functools import cache
 from functools import partial
@@ -69,6 +70,15 @@ class Dependency(Generic[P]):
 @overload
 def depends(
     provider: Callable[P, Awaitable[T]],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T:
+    ...
+
+
+@overload
+def depends(
+    provider: Callable[P, AbstractContextManager[T]],
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> T:

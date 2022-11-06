@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from operator import eq
 from operator import ne
@@ -30,7 +32,7 @@ class TestRequest:
             str(request)
 
 
-class TestInjected:
+class TestResolver:
     def test_can_resolve_simple_dependency(self):
         value = 123
 
@@ -163,8 +165,43 @@ class TestInjected:
             def dependent(value: int = depends(provider)) -> int:
                 return value
 
+    # TODO
+    @pytest.mark.xfail
+    def test_can_depend_on_context_manager(self):
+        # Test that:
+        # - It's possible to depend on context managers.
+        # - We only acquire the resource once, and then share it across the dependency
+        #   graph.
+        # - Context managers are properly torn down.
+        setup_count = 0
+        teardown_count = 0
 
-class TestAsyncInjected:
+        def top_level() -> int:
+            return 7
+
+        @contextmanager
+        def resource(tl: int = depends(top_level)) -> Iterator[int]:
+            nonlocal setup_count, teardown_count
+            setup_count += 1
+            yield tl * 3
+            teardown_count += 1
+
+        def intermediate(value: int = depends(resource)) -> int:
+            return value * 11
+
+        @resolver
+        def dependent(
+            a: int = depends(resource),
+            b: int = depends(intermediate),
+        ) -> int:
+            return a * b * 5
+
+        assert dependent() == 3 * 3 * 5 * 7 * 11
+        assert setup_count == 1
+        assert teardown_count == 1
+
+
+class TestAsyncResolver:
     async def test_can_resolve_simple_dependency(self):
         value = 123
 

@@ -8,5 +8,11 @@ target-version = ["py310"]
 [tool.pytest.ini_options]
 norecursedirs = ["examples"]
 testpaths = ["tests", "src", "README.md"]
-addopts = "--mypy-ini-file=setup.cfg --mypy-only-local-stub --doctest-modules"
+addopts = """\
+--mypy-ini-file=setup.cfg \
+--mypy-only-local-stub \
+--doctest-modules \
+--random-order-bucket=global \
+"""
 asyncio_mode = "auto"
+xfail_strict = true
