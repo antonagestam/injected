@@ -65,7 +65,7 @@ class TestResolver:
         class Request:
             payload: dict[str, str]
 
-        def get_request() -> Request:
+        def get_request() -> Request:  # type: ignore[empty-body]
             ...
 
         @resolver
@@ -261,7 +261,7 @@ class TestAsyncResolver:
         class Request:
             payload: dict[str, str]
 
-        def get_request() -> Request:
+        def get_request() -> Request:  # type: ignore[empty-body]
             ...
 
         async def view(request: Request = depends(get_request)) -> str:
