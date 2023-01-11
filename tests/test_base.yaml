@@ -23,7 +23,7 @@
     from typing import Callable, Tuple
 
     class Request: ...
-    def get_request() -> Request: ...
+    def get_request() -> Request: ...  # type: ignore[empty-body]
 
     @resolver
     def a(
