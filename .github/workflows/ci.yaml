@@ -37,7 +37,7 @@ jobs:
           cache-dependency-path: setup.cfg
           check-latest: true
       - run: pip install -e '.[test]'
-      - run: coverage run -m pytest
+      - run: coverage run -m pytest -k.py
       - run: |
           coverage report
           coverage xml
@@ -46,3 +46,21 @@ jobs:
           file: coverage.xml
           fail_ci_if_error: true
           name: codecov-py${{ matrix.python-version }}
+
+  test-typing:
+    name: Test static types
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: setup.cfg
+          check-latest: true
+      - run: pip install -e '.[test]'
+      - run: pytest -k.yaml
