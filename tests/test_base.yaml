@@ -1,8 +1,7 @@
 - case: test_maintains_decorated_type_hints
   main: |
     from injected import resolver, depends
-    from typing_extensions import assert_type
-    from typing import Callable, Tuple
+    from typing import assert_type, Callable
 
     @resolver
     def a(
@@ -11,16 +10,15 @@
     ) -> tuple[str, int]:
       return foo, bar
 
-    reveal_type(a)  # N: Revealed type is "def (foo: builtins.str =, bar: builtins.int =) -> Tuple[builtins.str, builtins.int]"
-    reveal_type(a())  # N: Revealed type is "Tuple[builtins.str, builtins.int]"
+    reveal_type(a)  # N: Revealed type is "def (foo: builtins.str =, bar: builtins.int =) -> tuple[builtins.str, builtins.int]"
+    reveal_type(a())  # N: Revealed type is "tuple[builtins.str, builtins.int]"
     a(foo=1)  # E: Argument "foo" to "a" has incompatible type "int"; expected "str"  [arg-type]
     a(bar="foo")  # E: Argument "bar" to "a" has incompatible type "str"; expected "int"  [arg-type]
 
 - case: test_seeded_resolver_maintains_type_hints
   main: |
     from injected import resolver, depends, seed_context
-    from typing_extensions import assert_type
-    from typing import Callable, Tuple
+    from typing import assert_type, Callable
 
     class Request: ...
     def get_request() -> Request: ...  # type: ignore[empty-body]
@@ -36,16 +34,15 @@
     context = {get_request: Request()}
     seeded = seed_context(a, context)
 
-    reveal_type(seeded)  # N: Revealed type is "def (request: main.Request =, foo: builtins.str =, bar: builtins.int =) -> Tuple[builtins.str, builtins.int, main.Request]"
-    reveal_type(seeded())  # N: Revealed type is "Tuple[builtins.str, builtins.int, main.Request]"
+    reveal_type(seeded)  # N: Revealed type is "def (request: main.Request =, foo: builtins.str =, bar: builtins.int =) -> tuple[builtins.str, builtins.int, main.Request]"
+    reveal_type(seeded())  # N: Revealed type is "tuple[builtins.str, builtins.int, main.Request]"
     seeded(foo=1)  # E: Argument "foo" has incompatible type "int"; expected "str"  [arg-type]
     seeded(bar="foo")  # E: Argument "bar" has incompatible type "str"; expected "int"  [arg-type]
 
 - case: test_maintains_type_hints_of_decorated_async_function
   main: |
     from injected import resolver, depends
-    from typing_extensions import assert_type
-    from typing import Callable, Tuple
+    from typing import assert_type, Callable
 
     @resolver
     async def a(
@@ -117,10 +114,16 @@
     ) -> int:
       return value
   out: |
-    main:20: error: Unexpected keyword argument "a" for "depends"  [call-arg]
-    main:20: error: Argument 1 to "depends" has incompatible type "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], int]"; expected "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], Awaitable[<nothing>]]"  [arg-type]
-    main:26: error: Too many positional arguments for "depends"  [misc]
-    main:26: error: Argument 1 to "depends" has incompatible type "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], int]"; expected "Callable[[int, str, DefaultNamedArg(Tuple[Any, ...], 'c')], Awaitable[<nothing>]]"  [arg-type]
+    main:20: error: No overload variant of "depends" matches argument types "Callable[[int, str, DefaultNamedArg(tuple[Any, ...], 'c')], int]", "int"  [call-overload]
+    main:20: note: Possible overload variants:
+    main:20: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:20: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:20: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
+    main:26: error: No overload variant of "depends" matches argument types "Callable[[int, str, DefaultNamedArg(tuple[Any, ...], 'c')], int]", "int", "str", "tuple[()]"  [call-overload]
+    main:26: note: Possible overload variants:
+    main:26: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:26: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:26: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
 
 - case: test_raises_error_for_incorrect_provider_argument_type
   main: |
@@ -141,10 +144,16 @@
     ) -> int:
       return value
   out: |
-    main:8: error: Argument 1 to "depends" has incompatible type "Callable[[int], int]"; expected "Callable[[int], Awaitable[<nothing>]]"  [arg-type]
-    main:8: error: Argument "v" to "depends" has incompatible type "str"; expected "int"  [arg-type]
-    main:14: error: Argument 1 to "depends" has incompatible type "Callable[[int], int]"; expected "Callable[[int], Awaitable[<nothing>]]"  [arg-type]
-    main:14: error: Argument 2 to "depends" has incompatible type "str"; expected "int"  [arg-type]
+    main:8: error: No overload variant of "depends" matches argument types "Callable[[int], int]", "str"  [call-overload]
+    main:8: note: Possible overload variants:
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: error: No overload variant of "depends" matches argument types "Callable[[int], int]", "str"  [call-overload]
+    main:14: note: Possible overload variants:
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
 
 - case: test_raises_error_for_missing_required_provider_argument
   main: |
@@ -159,8 +168,11 @@
     ) -> int:
       return value
   out: |
-    main:8: error: Missing positional argument "v" in call to "depends"  [call-arg]
-    main:8: error: Argument 1 to "depends" has incompatible type "Callable[[int], int]"; expected "Callable[[int], Awaitable[<nothing>]]"  [arg-type]
+    main:8: error: No overload variant of "depends" matches argument type "Callable[[int], int]"  [call-overload]
+    main:8: note: Possible overload variants:
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
 
 - case: test_raises_error_for_unexpected_provider_argument
   main: |
@@ -181,7 +193,13 @@
     ) -> int:
       return value
   out: |
-    main:8: error: Unexpected keyword argument "arg" for "depends"  [call-arg]
-    main:8: error: Argument 1 to "depends" has incompatible type "Callable[[], int]"; expected "Callable[[], Awaitable[<nothing>]]"  [arg-type]
-    main:14: error: Too many arguments for "depends"  [call-arg]
-    main:14: error: Argument 1 to "depends" has incompatible type "Callable[[], int]"; expected "Callable[[], Awaitable[<nothing>]]"  [arg-type]
+    main:8: error: No overload variant of "depends" matches argument types "Callable[[], int]", "int"  [call-overload]
+    main:8: note: Possible overload variants:
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: error: No overload variant of "depends" matches argument types "Callable[[], int]", "str"  [call-overload]
+    main:14: note: Possible overload variants:
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T

@@ -52,8 +52,7 @@ below, and then map it to a resolved value in a context passed to `seed_context(
 from injected import depends, resolver, seed_context
 
 
-def get_global_value() -> int:
-    ...
+def get_global_value() -> int: ...
 
 
 @resolver

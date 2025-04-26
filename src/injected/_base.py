@@ -11,12 +11,7 @@ from functools import cache
 from functools import partial
 from functools import wraps
 from typing import Any
-from typing import Generic
-from typing import NewType
 from typing import NoReturn
-from typing import ParamSpec
-from typing import TypeAlias
-from typing import TypeVar
 from typing import cast
 from typing import final
 from typing import overload
@@ -25,15 +20,12 @@ from immutables import Map
 
 from ._errors import IllegalAsyncDependency
 
-P = ParamSpec("P")
-T = TypeVar("T")
-
 
 @final
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Request(Generic[P]):
+class Request[**P]:
     provider: Callable[P, Any]
-    args: tuple
+    args: tuple[Any, ...]
     kwargs: Mapping[str, Any]
 
     def __eq__(self, other: object) -> NoReturn:
@@ -47,17 +39,17 @@ class Request(Generic[P]):
         )
 
 
-RequestKey = NewType("RequestKey", tuple[Callable, tuple, Mapping])
+type RequestKey = tuple[Callable[..., Any], tuple[Any, ...], Mapping[str, Any]]
 
 
-def request_key(request: Request) -> RequestKey:
-    return RequestKey((request.provider, request.args, request.kwargs))
+def request_key(request: Request[object]) -> RequestKey:
+    return request.provider, request.args, request.kwargs
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Dependency(Generic[P]):
+class Dependency[**P, T: Callable[..., Any] = Callable[..., Any]]:
     request: Request[P]
-    dependent: Callable
+    dependent: T
 
 
 # We intentionally "lie" in the return type here, for a good reason. The returned value
@@ -68,33 +60,24 @@ class Dependency(Generic[P]):
 # not receive type errors when a dependency provider has a return value that isn't
 # compatible with its parameter annotation.
 @overload
-def depends(
+def depends[T, **P](
     provider: Callable[P, Awaitable[T]],
     *args: P.args,
     **kwargs: P.kwargs,
-) -> T:
-    ...
-
-
+) -> T: ...
 @overload
-def depends(
+def depends[T, **P](
     provider: Callable[P, AbstractContextManager[T]],
     *args: P.args,
     **kwargs: P.kwargs,
-) -> T:
-    ...
-
-
+) -> T: ...
 @overload
-def depends(
+def depends[T, **P](
     provider: Callable[P, T],
     *args: P.args,
     **kwargs: P.kwargs,
-) -> T:
-    ...
-
-
-def depends(
+) -> T: ...
+def depends[T, **P](
     provider: Callable[P, T],
     *args: P.args,
     **kwargs: P.kwargs,
@@ -108,7 +91,9 @@ def depends(
 
 
 @cache
-def extract_dependencies(dependent: Callable) -> Iterator[Dependency]:
+def extract_dependencies[T: Callable[..., Any]](
+    dependent: T,
+) -> Iterator[Dependency[Any, T]]:
     """
     Inspect the signature of the given function and recursively generate dependency
     representations for each dependent parameter in the function and in its dependency
@@ -123,7 +108,7 @@ def extract_dependencies(dependent: Callable) -> Iterator[Dependency]:
 
 
 def resolve_arguments(
-    fn: Callable,
+    fn: Callable[..., Any],
     context: Mapping[RequestKey, object],
     args: Sequence[object],
     kwargs: Mapping[str, object],
@@ -149,7 +134,8 @@ def resolve_arguments(
 
 
 def assert_no_async_dependencies(
-    fn: Callable, dependencies: Iterable[Dependency]
+    fn: Callable[..., Any],
+    dependencies: Iterable[Dependency[Any, Any]],
 ) -> None:
     async_dependencies = {
         dependency.request.provider.__name__
@@ -166,9 +152,8 @@ def assert_no_async_dependencies(
         )
 
 
-C = TypeVar("C", bound=Callable)
-KeyContext: TypeAlias = Map[RequestKey, object]
-Context: TypeAlias = Mapping[Callable, object]
+type KeyContext = Map[RequestKey, object]
+type Context = Mapping[Callable[..., Any], object]
 
 
 def build_context(context: Context) -> KeyContext:
@@ -180,11 +165,14 @@ def build_context(context: Context) -> KeyContext:
     )
 
 
-def seed_context(wrapper: C, context: Context = Map()) -> C:
+def seed_context[C: Callable[..., Any]](
+    wrapper: C,
+    context: Context = Map(),
+) -> C:
     return cast(C, partial(wrapper, __seed_context__=context))
 
 
-def resolver(fn: C) -> C:
+def resolver[C: Callable[..., Any]](fn: C) -> C:
     dependencies = tuple(extract_dependencies(fn))
 
     if inspect.iscoroutinefunction(fn):

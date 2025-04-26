@@ -10,23 +10,49 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
+env:
+  COLUMNS: "120"
+  FORCE_COLOR: "1"
+  PYTHONUNBUFFERED: "1"
+
 jobs:
   lint:
     name: Static analysis
-    uses: less-action/reusables/.github/workflows/pre-commit.yaml@main
-    with:
-      python-version: "3.11"
+    uses: antonagestam/goose/.github/workflows/run.yaml@0.10.1
 
   check-build:
     name: Check packaging metadata
     uses: less-action/reusables/.github/workflows/python-test-build.yaml@main
+
+  type-check:
+    name: Type check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.13
+          cache: pip
+          cache-dependency-path: requirements.txt
+          check-latest: true
+      - name: mypy cache
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: "${{ runner.os }}-mypy-3.13-${{ hashFiles('requirements.txt') }}"
+          restore-keys: |
+            ${{ runner.os }}-mypy-3.13
+            ${{ runner.os }}-mypy
+      - run: pip install -e .
+      - run: pip install -r requirements.txt
+      - run: mypy --strict
 
   test:
     name: Test
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.13"]
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python
@@ -41,11 +67,13 @@ jobs:
       - run: |
           coverage report
           coverage xml
-      - uses: codecov/codecov-action@v3
+      - uses: codecov/codecov-action@v5
         with:
-          file: coverage.xml
+          files: coverage.xml
           fail_ci_if_error: true
           name: codecov-py${{ matrix.python-version }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          verbose: true
 
   test-typing:
     name: Test static types
@@ -55,7 +83,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.13"
           cache: pip
           cache-dependency-path: setup.cfg
           check-latest: true
