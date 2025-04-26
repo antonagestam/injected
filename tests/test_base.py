@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from operator import eq
 from operator import ne
+from typing import Any
 
 import pytest
 from immutables import Map
@@ -17,7 +18,10 @@ from injected._errors import IllegalAsyncDependency
 
 class TestRequest:
     @pytest.mark.parametrize("operator", (eq, ne))
-    def test_raises_not_implemented_error_when_compared(self, operator: Callable):
+    def test_raises_not_implemented_error_when_compared(
+        self,
+        operator: Callable[..., Any],
+    ):
         request = Request(provider=lambda: None, args=(), kwargs=Map())
         with pytest.raises(NotImplementedError):
             operator(request, request)

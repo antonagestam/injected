@@ -6,3 +6,7 @@ exclude *.yaml
 exclude *.yml
 include README.md
 include LICENSE
+recursive-exclude .goose *
+exclude Makefile
+exclude mypy.ini
+exclude requirements.txt

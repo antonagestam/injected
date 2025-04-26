@@ -1,13 +1,75 @@
 [build-system]
-requires = ["setuptools>=65.5.1", "wheel"]
+requires = [
+  "setuptools==79.0.1",
+  "setuptools-scm==8.3.1",
+  "wheel==0.45.1",
+]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools_scm]
+version_file = "src/injected/_version.py"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.dynamic]
+readme = {file = "README.md", content-type = "text/markdown; charset=UTF-8"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+
+[project]
+name = "injected"
+authors = [
+  { name="Anton Agestam", email="git@antonagestam.se" },
+]
+description = "Simple, type-safe dependency injection"
+license = "BSD-3-Clause"
+license-files = ["LICENSE"]
+requires-python = ">=3.13"
+classifiers = [
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.13",
+  "Development Status :: 4 - Beta",
+  "Typing :: Typed",
+]
+dynamic = ["version", "readme"]
+dependencies = [
+  "immutables>=0.21",
+]
+
+[project.optional-dependencies]
+test = [
+  "mypy",
+  "pytest",
+  "pytest-mypy-plugins",
+  "pytest-asyncio",
+  "pytest-random-order",
+  "coverage",
+]
+
+[project.urls]
+"Source Repository" = "https://github.com/antonagestam/injected/"
+"Bug Tracker" = "https://github.com/antonagestam/injected/issues"
+
+
 [tool.black]
-target-version = ["py310"]
+target-version = ["py313"]
+
+
+[tool.check-manifest]
+ignore = ["src/injected/_version.py"]
+
 
 [tool.pytest.ini_options]
 norecursedirs = ["examples"]
-testpaths = ["tests", "src", "README.md"]
+testpaths = ["tests", "src"]
 addopts = """\
 --mypy-ini-file=setup.cfg \
 --mypy-only-local-stub \
@@ -16,3 +78,16 @@ addopts = """\
 """
 asyncio_mode = "auto"
 xfail_strict = true
+
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+
+[tool.coverage.report]
+skip_covered = true
+show_missing = true
+exclude_also = [
+  '^\s*\.\.\.',
+  'if TYPE_CHECKING:',
+]
