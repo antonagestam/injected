@@ -67,14 +67,18 @@ def test_can_seed_resolver_context():
     assert seeded() == 44
 ```
 
-#### Async dependencies
+#### Async dependencies and context managers
 
-The `@resolver` decorator works with both async and non-async functions, with the
-restriction that async dependencies can only be used with an async resolver. An async
-resolver however, can resolve both async and vanilla dependencies.
+Dependencies can be any combination of async and non-async functions and context
+managers. Async dependencies are resolved concurrently, and are scheduled at the optimal
+time, as soon as their own dependencies are resolved.
+
+Context managers are torn down upon exiting the entry-point function.
 
 ```python
 import asyncio
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from injected import depends, resolver
 
 
@@ -86,14 +90,30 @@ def get_b() -> int:
     return 17
 
 
+@asynccontextmanager
+async def get_c() -> AsyncIterator[int]:
+    yield 23
+
+
 @resolver
-async def get_sum(
+async def get_sum_async(
     a: int = depends(get_a),
     b: int = depends(get_b),
+    c: int = depends(get_c),
 ) -> int:
-    return a + b
+    return a + b + c
+
+
+@resolver
+def get_sum_sync(
+    a: int = depends(get_a),
+    b: int = depends(get_b),
+    c: int = depends(get_c),
+) -> int:
+    return a + b + c
 
 
 def test_resolves_dependencies():
-    assert asyncio.run(get_sum()) == 30
+    assert asyncio.run(get_sum_async()) == 53
+    assert get_sum_sync() == 53
 ```
