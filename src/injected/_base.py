@@ -1,16 +1,21 @@
+from __future__ import annotations
+
+import asyncio
 import inspect
 from collections.abc import Awaitable
 from collections.abc import Callable
-from collections.abc import Iterable
-from collections.abc import Iterator
+from collections.abc import Container
 from collections.abc import Mapping
-from collections.abc import Sequence
+from collections.abc import Set
 from contextlib import AbstractContextManager
+from copy import replace
 from dataclasses import dataclass
 from functools import cache
 from functools import partial
 from functools import wraps
+from graphlib import TopologicalSorter
 from typing import Any
+from typing import Final
 from typing import NoReturn
 from typing import cast
 from typing import final
@@ -18,15 +23,11 @@ from typing import overload
 
 from immutables import Map
 
-from ._errors import IllegalAsyncDependency
-
 
 @final
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Request[**P]:
-    provider: Callable[P, Any]
-    args: tuple[Any, ...]
-    kwargs: Mapping[str, Any]
+class Marker[**P, R]:
+    request: Request[P, R]
 
     def __eq__(self, other: object) -> NoReturn:
         # To avoid accidental use of sentinel values we disallow comparison.
@@ -39,17 +40,12 @@ class Request[**P]:
         )
 
 
-type RequestKey = tuple[Callable[..., Any], tuple[Any, ...], Mapping[str, Any]]
-
-
-def request_key(request: Request[object]) -> RequestKey:
-    return request.provider, request.args, request.kwargs
-
-
+@final
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Dependency[**P, T: Callable[..., Any] = Callable[..., Any]]:
-    request: Request[P]
-    dependent: T
+class Request[**P = Any, R = Any]:
+    provider: Callable[P, R]
+    args: tuple[object, ...]
+    kwargs: Map[str, object]
 
 
 # We intentionally "lie" in the return type here, for a good reason. The returned value
@@ -82,87 +78,124 @@ def depends[T, **P](
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> T:
-    request = Request(
-        provider=provider,
-        args=tuple(args),
-        kwargs=Map(kwargs),
+    marker = Marker(
+        request=Request(
+            provider=provider,
+            args=tuple(args),
+            kwargs=Map(kwargs),
+        )
     )
-    return cast(T, request)
+    return cast(T, marker)
 
 
 @cache
-def extract_dependencies[T: Callable[..., Any]](
-    dependent: T,
-) -> Iterator[Dependency[Any, T]]:
-    """
-    Inspect the signature of the given function and recursively generate dependency
-    representations for each dependent parameter in the function and in its dependency
-    providers. Dependencies are generated in a resolvable order.
-    """
-    signature = inspect.signature(dependent)
-    for parameter in signature.parameters.values():
-        if not isinstance(parameter.default, Request):
-            continue
-        yield from extract_dependencies(parameter.default.provider)
-        yield Dependency(request=parameter.default, dependent=dependent)
+def get_signature(fn: Callable[..., object]) -> inspect.Signature:
+    return inspect.signature(fn)
 
 
-def resolve_arguments(
-    fn: Callable[..., Any],
-    context: Mapping[RequestKey, object],
-    args: Sequence[object],
-    kwargs: Mapping[str, object],
-) -> inspect.BoundArguments:
-    # Inspect the signature of the provider, and replace all Request defaults with
-    # resolved values from `context`.
-    signature = inspect.signature(fn)
-    replaced = signature.replace(
-        parameters=tuple(
-            (
-                parameter.replace(default=context[request_key(parameter.default)])
-                if isinstance(parameter.default, Request)
-                else parameter
-            )
-            for parameter in signature.parameters.values()
-        )
-    )
-    # Bind the given args and kwargs to the signature, and apply the newly assigned
-    # default values.
-    bound_arguments = replaced.bind(*args, **kwargs)
+type Graph = Mapping[Request, Set[Request]]
+
+
+def build_graph(
+    request: Request,
+    context: Container[Request],
+) -> Graph:
+    signature = get_signature(request.provider)
+    # Bind args and kwargs so that we can omit modeling nodes that won't be needed.
+    bound_arguments = signature.bind_partial(*request.args, **request.kwargs)
     bound_arguments.apply_defaults()
-    return bound_arguments
 
-
-def assert_no_async_dependencies(
-    fn: Callable[..., Any],
-    dependencies: Iterable[Dependency[Any, Any]],
-) -> None:
-    async_dependencies = {
-        dependency.request.provider.__name__
-        for dependency in dependencies
-        if inspect.iscoroutinefunction(dependency.request.provider)
-    }
-    if async_dependencies:
-        raise IllegalAsyncDependency(
-            f"Cannot depend on coroutine dependencies (defined with async def) "
-            f"when in a synchronous context. To use async dependencies, "
-            f"@{resolver.__name__} must be applied to an async function. "
-            f"({fn.__name__} is not async, but these dependencies are: "
-            f"{async_dependencies})."
-        )
-
-
-type KeyContext = Map[RequestKey, object]
-type Context = Mapping[Callable[..., Any], object]
-
-
-def build_context(context: Context) -> KeyContext:
-    return Map(
+    graph = Map[Request, Set[Request]]().mutate()
+    requests = frozenset(
         {
-            request_key(Request(provider=provider, args=(), kwargs=Map())): value
-            for provider, value in context.items()
+            value.request
+            for value in bound_arguments.arguments.values()
+            if isinstance(value, Marker)
+            if value.request not in context
         }
     )
+    for nested_request in requests:
+        graph.update(build_graph(nested_request, context))
+
+    graph.set(request, requests)
+    return graph.finish()
+
+
+sentinel: Final = object()
+
+
+def execute_request[T](
+    request: Request[Any, T],
+    context: Map[Request[Any, object], object],
+) -> T:
+    signature = get_signature(request.provider)
+    params = []
+    for parameter in signature.parameters.values():
+        if (
+            isinstance(parameter.default, Marker)
+            and (context_value := context.get(parameter.default.request, sentinel))
+            is not sentinel
+        ):
+            params.append(replace(parameter, default=context_value))
+            continue
+
+        params.append(parameter)
+
+    signature = replace(signature, parameters=tuple(params))
+    bound_arguments = signature.bind(*request.args, **request.kwargs)
+    bound_arguments.apply_defaults()
+    return request.provider(*bound_arguments.args, **bound_arguments.kwargs)
+
+
+async def resolve[T](
+    fn: Callable[..., T],
+    seed: Context,
+    args: tuple[object, ...],
+    kwargs: Map[str, object],
+) -> T:
+    request = Request(provider=fn, args=args, kwargs=kwargs)
+    context = Map(
+        {
+            Request(provider=provider, args=(), kwargs=Map()): value
+            for provider, value in seed.items()
+        }
+    )
+
+    # Remember: a single provider can have multiple nodes in the graph, since it shall
+    # be called with different arguments as passed.
+    graph = build_graph(request, context)
+    topological_sorter = TopologicalSorter(graph)
+    topological_sorter.prepare()
+
+    pending_requests: dict[asyncio.Task[object], Request] = {}
+
+    while topological_sorter.is_active():
+        # important: query new requests _before_ creating the context mutation.
+        requests = tuple(topological_sorter.get_ready())
+        context_update = context.mutate()
+
+        for task, pending_request in tuple(pending_requests.items()):
+            if not task.done():
+                continue
+            context_update.set(pending_request, task.result())
+            topological_sorter.done(pending_request)
+            del pending_requests[task]
+
+        for new_request in requests:
+            if inspect.iscoroutinefunction(new_request.provider):
+                task = asyncio.create_task(execute_request(new_request, context))
+                pending_requests[task] = new_request
+            else:
+                context_update.set(new_request, execute_request(new_request, context))
+                topological_sorter.done(new_request)
+
+        context = context_update.finish()
+        await asyncio.sleep(0)
+
+    return context[request]  # type: ignore[return-value]
+
+
+type Context = Mapping[Callable[..., Any], object]
 
 
 def seed_context[C: Callable[..., Any]](
@@ -173,8 +206,6 @@ def seed_context[C: Callable[..., Any]](
 
 
 def resolver[C: Callable[..., Any]](fn: C) -> C:
-    dependencies = tuple(extract_dependencies(fn))
-
     if inspect.iscoroutinefunction(fn):
 
         @wraps(fn)
@@ -183,29 +214,9 @@ def resolver[C: Callable[..., Any]](fn: C) -> C:
             __seed_context__: Context = Map(),
             **kwargs: object,
         ) -> object:
-            context = build_context(__seed_context__)
-
-            for dependency in dependencies:
-                key = request_key(dependency.request)
-                if key in context:
-                    continue
-                bound_arguments = resolve_arguments(
-                    dependency.request.provider,
-                    context,
-                    dependency.request.args,
-                    dependency.request.kwargs,
-                )
-                task = dependency.request.provider(
-                    *bound_arguments.args, **bound_arguments.kwargs
-                )
-                result = await task if inspect.iscoroutine(task) else task
-                context = context.set(key, result)
-
-            bound_arguments = resolve_arguments(fn, context, args, kwargs)
-            return await fn(*bound_arguments.args, **bound_arguments.kwargs)
+            return await resolve(fn, __seed_context__, args, Map(kwargs))
 
     else:
-        assert_no_async_dependencies(fn, dependencies)
 
         @wraps(fn)
         def wrapper(
@@ -213,24 +224,6 @@ def resolver[C: Callable[..., Any]](fn: C) -> C:
             __seed_context__: Context = Map(),
             **kwargs: object,
         ) -> object:
-            context = build_context(__seed_context__)
-
-            for dependency in dependencies:
-                key = request_key(dependency.request)
-                if key in context:
-                    continue
-                bound_arguments = resolve_arguments(
-                    dependency.request.provider,
-                    context,
-                    dependency.request.args,
-                    dependency.request.kwargs,
-                )
-                result = dependency.request.provider(
-                    *bound_arguments.args, **bound_arguments.kwargs
-                )
-                context = context.set(key, result)
-
-            bound_arguments = resolve_arguments(fn, context, args, kwargs)
-            return fn(*bound_arguments.args, **bound_arguments.kwargs)
+            return asyncio.run(resolve(fn, __seed_context__, args, Map(kwargs)))
 
     return cast(C, wrapper)

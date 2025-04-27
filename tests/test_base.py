@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -12,28 +13,30 @@ from immutables import Map
 from injected import depends
 from injected import resolver
 from injected import seed_context
+from injected._base import Marker
 from injected._base import Request
-from injected._errors import IllegalAsyncDependency
 
 
-class TestRequest:
+class TestMarker:
     @pytest.mark.parametrize("operator", (eq, ne))
     def test_raises_not_implemented_error_when_compared(
         self,
         operator: Callable[..., Any],
     ):
         request = Request(provider=lambda: None, args=(), kwargs=Map())
+        marker = Marker(request=request)
         with pytest.raises(NotImplementedError):
-            operator(request, request)
+            operator(marker, marker)
         with pytest.raises(NotImplementedError):
-            operator(request, "other")
+            operator(marker, "other")
         with pytest.raises(NotImplementedError):
-            operator("other", request)
+            operator("other", marker)
 
     def test_raises_not_implemented_error_when_cast_to_str(self):
         request = Request(provider=lambda: None, args=(), kwargs=Map())
+        marker = Marker(request=request)
         with pytest.raises(NotImplementedError):
-            str(request)
+            str(marker)
 
 
 class TestResolver:
@@ -49,6 +52,32 @@ class TestResolver:
 
         assert dependent() == value
 
+    def test_can_resolve_simple_async_dependency(self):
+        value = 123
+
+        async def provider() -> int:
+            return value
+
+        @resolver
+        def dependent(arg: int = depends(provider)) -> int:
+            return arg
+
+        assert dependent() == value
+
+    def test_can_resolve_concurrent_async_dependencies(self):
+        async def provider(arg: int) -> int:
+            return arg
+
+        @resolver
+        def dependent(
+            a: int = depends(provider, arg=3),
+            b: int = depends(provider, arg=5),
+            c: int = depends(provider, arg=7),
+        ) -> int:
+            return a * b * c
+
+        assert dependent() == 3 * 5 * 7
+
     def test_can_resolve_nested_dependency(self):
         value = 123
 
@@ -56,30 +85,51 @@ class TestResolver:
             return value
 
         def b(provided: int = depends(a)) -> int:
+            return provided + 2
+
+        def c(provided: int = depends(a)) -> int:
+            return provided + 1
+
+        @resolver
+        def d(
+            b_value: int = depends(b),
+            c_value: int = depends(c),
+        ) -> int:
+            return b_value + c_value
+
+        assert d() == value + 1 + value + 2
+
+    def test_can_inject_seed_context(self):
+        @dataclass
+        class LogicRequest:
+            payload: dict[str, str]
+
+        def get_request() -> LogicRequest:  # type: ignore[empty-body]
+            ...
+
+        @resolver
+        def view(request: LogicRequest = depends(get_request)) -> str:
+            return f"Hello {request.payload['username']}"
+
+        context = {get_request: LogicRequest(payload={"username": "Squanchy"})}
+        seeded = seed_context(view, context)
+
+        assert seeded() == "Hello Squanchy"
+
+    def test_can_resolve_async_dependency_with_nested_sync_dependency(self):
+        value = 123
+
+        def a() -> int:
+            return value
+
+        async def b(provided: int = depends(a)) -> int:
             return provided
 
         @resolver
         def c(provided: int = depends(b)) -> int:
             return provided
 
-        assert c() == value
-
-    def test_can_inject_seed_context(self):
-        @dataclass
-        class Request:
-            payload: dict[str, str]
-
-        def get_request() -> Request:  # type: ignore[empty-body]
-            ...
-
-        @resolver
-        def view(request: Request = depends(get_request)) -> str:
-            return f"Hello {request.payload['username']}"
-
-        context = {get_request: Request(payload={"username": "Squanchy"})}
-        seeded = seed_context(view, context)
-
-        assert seeded() == "Hello Squanchy"
+        assert value == c()
 
     def test_passes_provider_arguments(self):
         def a(value: int) -> int:
@@ -133,14 +183,12 @@ class TestResolver:
         def dependent(
             plain: int = depends(counter, arg=2),
             nested: int = depends(intermediate),
-        ) -> tuple[int, int]:
-            return plain, nested
+        ) -> set[int]:
+            return {plain, nested}
 
-        assert (1, 2) == dependent()
+        assert {1, 2} == dependent()
         assert 2 == count
 
-    # TODO
-    @pytest.mark.xfail
     def test_skips_evaluation_when_dependency_passed_as_argument(self):
         count = 0
 
@@ -158,16 +206,6 @@ class TestResolver:
 
         assert dependent(-17) == -17
         assert count == 0
-
-    def test_raises_illegal_async_dependency_for_coroutine_dependency(self):
-        async def provider() -> int:
-            return 0
-
-        with pytest.raises(IllegalAsyncDependency):
-
-            @resolver
-            def dependent(value: int = depends(provider)) -> int:
-                return value
 
     # TODO
     @pytest.mark.xfail
@@ -343,8 +381,55 @@ class TestAsyncResolver:
         async def dependent(
             plain: int = depends(counter, arg=2),
             nested: int = depends(intermediate),
-        ) -> tuple[int, int]:
-            return plain, nested
+        ) -> set[int]:
+            return {plain, nested}
 
-        assert (1, 2) == await dependent()
+        assert {1, 2} == await dependent()
         assert 2 == count
+
+    async def test_skips_evaluation_when_dependency_passed_as_argument(self):
+        count = 0
+
+        async def counter() -> int:
+            nonlocal count
+            count += 1
+            return count
+
+        async def intermediate(value: int = depends(counter)) -> int:
+            return value
+
+        @resolver
+        async def dependent(value: int = depends(intermediate)) -> int:
+            return value
+
+        assert await dependent(-17) == -17
+        assert count == 0
+
+    async def test_can_resolve_concurrent_async_dependencies(self):
+        async def provider(arg: int) -> int:
+            return arg
+
+        @resolver
+        async def dependent(
+            a: int = depends(provider, arg=3),
+            b: int = depends(provider, arg=5),
+            c: int = depends(provider, arg=7),
+        ) -> int:
+            return a * b * c
+
+        assert await dependent() == 3 * 5 * 7
+
+    async def test_can_resolve_slow_async_dependencies(self):
+        async def provider(arg: int) -> int:
+            await asyncio.sleep(arg * 0.05)
+            return arg
+
+        @resolver
+        async def dependent(
+            a: int = depends(provider, arg=3),
+            b: int = depends(provider, arg=5),
+            c: int = depends(provider, arg=7),
+        ) -> int:
+            return a * b * c
+
+        assert await dependent() == 3 * 5 * 7
