@@ -10,3 +10,4 @@ recursive-exclude .goose *
 exclude Makefile
 exclude mypy.ini
 exclude requirements.txt
+exclude ruff.toml
