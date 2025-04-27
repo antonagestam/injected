@@ -118,11 +118,13 @@
     main:20: note: Possible overload variants:
     main:20: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
     main:20: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:20: note:     def [P`-1, T] depends(provider: Callable[P, AbstractAsyncContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
     main:20: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
     main:26: error: No overload variant of "depends" matches argument types "Callable[[int, str, DefaultNamedArg(tuple[Any, ...], 'c')], int]", "int", "str", "tuple[()]"  [call-overload]
     main:26: note: Possible overload variants:
     main:26: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
     main:26: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:26: note:     def [P`-1, T] depends(provider: Callable[P, AbstractAsyncContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
     main:26: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
 
 - case: test_raises_error_for_incorrect_provider_argument_type
@@ -148,11 +150,13 @@
     main:8: note: Possible overload variants:
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractAsyncContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
     main:14: error: No overload variant of "depends" matches argument types "Callable[[int], int]", "str"  [call-overload]
     main:14: note: Possible overload variants:
     main:14: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
     main:14: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, AbstractAsyncContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
     main:14: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
 
 - case: test_raises_error_for_missing_required_provider_argument
@@ -172,6 +176,7 @@
     main:8: note: Possible overload variants:
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractAsyncContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
 
 - case: test_raises_error_for_unexpected_provider_argument
@@ -197,9 +202,11 @@
     main:8: note: Possible overload variants:
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:8: note:     def [P`-1, T] depends(provider: Callable[P, AbstractAsyncContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
     main:8: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T
     main:14: error: No overload variant of "depends" matches argument types "Callable[[], int]", "str"  [call-overload]
     main:14: note: Possible overload variants:
     main:14: note:     def [P`-1, T] depends(provider: Callable[P, Awaitable[T]], *args: P.args, **kwargs: P.kwargs) -> T
     main:14: note:     def [P`-1, T] depends(provider: Callable[P, AbstractContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
+    main:14: note:     def [P`-1, T] depends(provider: Callable[P, AbstractAsyncContextManager[T, bool | None]], *args: P.args, **kwargs: P.kwargs) -> T
     main:14: note:     def [P`-1, T] depends(provider: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T

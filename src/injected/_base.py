@@ -7,7 +7,9 @@ from collections.abc import Callable
 from collections.abc import Container
 from collections.abc import Mapping
 from collections.abc import Set
+from contextlib import AbstractAsyncContextManager
 from contextlib import AbstractContextManager
+from contextlib import AsyncExitStack
 from copy import replace
 from dataclasses import dataclass
 from functools import cache
@@ -64,6 +66,12 @@ def depends[T, **P](
 @overload
 def depends[T, **P](
     provider: Callable[P, AbstractContextManager[T]],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T: ...
+@overload
+def depends[T, **P](
+    provider: Callable[P, AbstractAsyncContextManager[T]],
     *args: P.args,
     **kwargs: P.kwargs,
 ) -> T: ...
@@ -169,28 +177,34 @@ async def resolve[T](
 
     pending_requests: dict[asyncio.Task[object], Request] = {}
 
-    while topological_sorter.is_active():
-        # important: query new requests _before_ creating the context mutation.
-        requests = tuple(topological_sorter.get_ready())
-        context_update = context.mutate()
+    async with AsyncExitStack() as context_stack:
+        while topological_sorter.is_active():
+            # important: query new requests _before_ creating the context mutation.
+            requests = tuple(topological_sorter.get_ready())
+            context_update = context.mutate()
 
-        for task, pending_request in tuple(pending_requests.items()):
-            if not task.done():
-                continue
-            context_update.set(pending_request, task.result())
-            topological_sorter.done(pending_request)
-            del pending_requests[task]
+            for task, pending_request in tuple(pending_requests.items()):
+                if not task.done():
+                    continue
+                context_update.set(pending_request, task.result())
+                topological_sorter.done(pending_request)
+                del pending_requests[task]
 
-        for new_request in requests:
-            if inspect.iscoroutinefunction(new_request.provider):
-                task = asyncio.create_task(execute_request(new_request, context))
-                pending_requests[task] = new_request
-            else:
-                context_update.set(new_request, execute_request(new_request, context))
-                topological_sorter.done(new_request)
+            for new_request in requests:
+                if inspect.iscoroutinefunction(new_request.provider):
+                    task = asyncio.create_task(execute_request(new_request, context))
+                    pending_requests[task] = new_request
+                else:
+                    result = execute_request(new_request, context)
+                    if isinstance(result, AbstractAsyncContextManager):
+                        result = await context_stack.enter_async_context(result)
+                    elif isinstance(result, AbstractContextManager):
+                        result = context_stack.enter_context(result)
+                    context_update.set(new_request, result)
+                    topological_sorter.done(new_request)
 
-        context = context_update.finish()
-        await asyncio.sleep(0)
+            context = context_update.finish()
+            await asyncio.sleep(0)
 
     return context[request]  # type: ignore[return-value]
 

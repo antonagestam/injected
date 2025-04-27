@@ -1,6 +1,9 @@
 import asyncio
+import enum
+from collections.abc import AsyncIterator
 from collections.abc import Callable
 from collections.abc import Iterator
+from contextlib import asynccontextmanager
 from contextlib import contextmanager
 from dataclasses import dataclass
 from operator import eq
@@ -37,6 +40,13 @@ class TestMarker:
         marker = Marker(request=request)
         with pytest.raises(NotImplementedError):
             str(marker)
+
+
+class ContextEvent(enum.Enum):
+    setup = enum.auto()
+    teardown = enum.auto()
+    dependency = enum.auto()
+    usage = enum.auto()
 
 
 class TestResolver:
@@ -207,28 +217,26 @@ class TestResolver:
         assert dependent(-17) == -17
         assert count == 0
 
-    # TODO
-    @pytest.mark.xfail
     def test_can_depend_on_context_manager(self):
         # Test that:
         # - It's possible to depend on context managers.
         # - We only acquire the resource once, and then share it across the dependency
         #   graph.
         # - Context managers are properly torn down.
-        setup_count = 0
-        teardown_count = 0
+        events = []
 
         def top_level() -> int:
+            events.append(ContextEvent.dependency)
             return 7
 
         @contextmanager
         def resource(tl: int = depends(top_level)) -> Iterator[int]:
-            nonlocal setup_count, teardown_count
-            setup_count += 1
+            events.append(ContextEvent.setup)
             yield tl * 3
-            teardown_count += 1
+            events.append(ContextEvent.teardown)
 
         def intermediate(value: int = depends(resource)) -> int:
+            events.append(ContextEvent.usage)
             return value * 11
 
         @resolver
@@ -236,11 +244,56 @@ class TestResolver:
             a: int = depends(resource),
             b: int = depends(intermediate),
         ) -> int:
+            events.append(ContextEvent.usage)
             return a * b * 5
 
-        assert dependent() == 3 * 3 * 5 * 7 * 11
-        assert setup_count == 1
-        assert teardown_count == 1
+        assert dependent() == 3 * 3 * 5 * 7 * 7 * 11
+        assert events == [
+            ContextEvent.dependency,
+            ContextEvent.setup,
+            ContextEvent.usage,
+            ContextEvent.usage,
+            ContextEvent.teardown,
+        ]
+
+    def test_can_depend_on_async_context_manager(self):
+        # Test that:
+        # - It's possible to depend on async context managers.
+        # - We only acquire the resource once, and then share it across the dependency
+        #   graph.
+        # - Context managers are properly torn down.
+        events = []
+
+        async def top_level() -> int:
+            events.append(ContextEvent.dependency)
+            return 7
+
+        @asynccontextmanager
+        async def resource(tl: int = depends(top_level)) -> AsyncIterator[int]:
+            events.append(ContextEvent.setup)
+            yield tl * 3
+            events.append(ContextEvent.teardown)
+
+        def intermediate(value: int = depends(resource)) -> int:
+            events.append(ContextEvent.usage)
+            return value * 11
+
+        @resolver
+        def dependent(
+            a: int = depends(resource),
+            b: int = depends(intermediate),
+        ) -> int:
+            events.append(ContextEvent.usage)
+            return a * b * 5
+
+        assert dependent() == 3 * 3 * 5 * 7 * 7 * 11
+        assert events == [
+            ContextEvent.dependency,
+            ContextEvent.setup,
+            ContextEvent.usage,
+            ContextEvent.usage,
+            ContextEvent.teardown,
+        ]
 
 
 class TestAsyncResolver:
@@ -433,3 +486,81 @@ class TestAsyncResolver:
             return a * b * c
 
         assert await dependent() == 3 * 5 * 7
+
+    async def test_can_depend_on_context_manager(self):
+        # Test that:
+        # - It's possible to depend on context managers.
+        # - We only acquire the resource once, and then share it across the dependency
+        #   graph.
+        # - Context managers are properly torn down.
+        events = []
+
+        def top_level() -> int:
+            events.append(ContextEvent.dependency)
+            return 7
+
+        @contextmanager
+        def resource(tl: int = depends(top_level)) -> Iterator[int]:
+            events.append(ContextEvent.setup)
+            yield tl * 3
+            events.append(ContextEvent.teardown)
+
+        def intermediate(value: int = depends(resource)) -> int:
+            events.append(ContextEvent.usage)
+            return value * 11
+
+        @resolver
+        async def dependent(
+            a: int = depends(resource),
+            b: int = depends(intermediate),
+        ) -> int:
+            events.append(ContextEvent.usage)
+            return a * b * 5
+
+        assert await dependent() == 3 * 3 * 5 * 7 * 7 * 11
+        assert events == [
+            ContextEvent.dependency,
+            ContextEvent.setup,
+            ContextEvent.usage,
+            ContextEvent.usage,
+            ContextEvent.teardown,
+        ]
+
+    async def test_can_depend_on_async_context_manager(self):
+        # Test that:
+        # - It's possible to depend on async context managers.
+        # - We only acquire the resource once, and then share it across the dependency
+        #   graph.
+        # - Context managers are properly torn down.
+        events = []
+
+        async def top_level() -> int:
+            events.append(ContextEvent.dependency)
+            return 7
+
+        @asynccontextmanager
+        async def resource(tl: int = depends(top_level)) -> AsyncIterator[int]:
+            events.append(ContextEvent.setup)
+            yield tl * 3
+            events.append(ContextEvent.teardown)
+
+        async def intermediate(value: int = depends(resource)) -> int:
+            events.append(ContextEvent.usage)
+            return value * 11
+
+        @resolver
+        async def dependent(
+            a: int = depends(resource),
+            b: int = depends(intermediate),
+        ) -> int:
+            events.append(ContextEvent.usage)
+            return a * b * 5
+
+        assert await dependent() == 3 * 3 * 5 * 7 * 7 * 11
+        assert events == [
+            ContextEvent.dependency,
+            ContextEvent.setup,
+            ContextEvent.usage,
+            ContextEvent.usage,
+            ContextEvent.teardown,
+        ]
