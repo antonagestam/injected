@@ -33,12 +33,12 @@ class Marker[**P, R]:
 
     def __eq__(self, other: object) -> NoReturn:
         # To avoid accidental use of sentinel values we disallow comparison.
-        raise NotImplementedError("Request objects cannot be used for comparison.")
+        raise NotImplementedError("Marker object cannot be used in comparison.")
 
     def __str__(self) -> NoReturn:
         # To avoid accidental use of sentinel values we disallow casting to str.
         raise NotImplementedError(
-            "Request objects do not have a string representations."
+            "Marker object does not have a string representation."
         )
 
 
