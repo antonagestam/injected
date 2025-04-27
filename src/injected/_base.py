@@ -191,14 +191,17 @@ async def resolve[T](
                 del pending_requests[task]
 
             for new_request in requests:
+                result = execute_request(new_request, context)
                 if inspect.iscoroutinefunction(new_request.provider):
-                    task = asyncio.create_task(execute_request(new_request, context))
+                    task = asyncio.create_task(result)
+                    pending_requests[task] = new_request
+                elif isinstance(result, AbstractAsyncContextManager):
+                    task = asyncio.create_task(
+                        context_stack.enter_async_context(result)
+                    )
                     pending_requests[task] = new_request
                 else:
-                    result = execute_request(new_request, context)
-                    if isinstance(result, AbstractAsyncContextManager):
-                        result = await context_stack.enter_async_context(result)
-                    elif isinstance(result, AbstractContextManager):
+                    if isinstance(result, AbstractContextManager):
                         result = context_stack.enter_context(result)
                     context_update.set(new_request, result)
                     topological_sorter.done(new_request)
