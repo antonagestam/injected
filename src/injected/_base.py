@@ -126,7 +126,7 @@ sentinel: Final = object()
 
 def execute_request[T](
     request: Request[Any, T],
-    context: Map[Request[Any, object], object],
+    context: Map[Request, object],
 ) -> T:
     signature = get_signature(request.provider)
     params = []
