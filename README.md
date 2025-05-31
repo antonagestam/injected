@@ -35,8 +35,7 @@ def get_sum(
     return a + b
 
 
-def test_resolves_dependencies():
-    assert get_sum() == 30
+assert get_sum() == 30
 ```
 
 #### Seeding the context of a resolver
@@ -62,9 +61,7 @@ def calculate_value(a: int = depends(get_global_value)) -> int:
 
 seeded = seed_context(calculate_value, {get_global_value: 31})
 
-
-def test_can_seed_resolver_context():
-    assert seeded() == 44
+assert seeded() == 44
 ```
 
 #### Async dependencies and context managers
@@ -113,7 +110,6 @@ def get_sum_sync(
     return a + b + c
 
 
-def test_resolves_dependencies():
-    assert asyncio.run(get_sum_async()) == 53
-    assert get_sum_sync() == 53
+assert asyncio.run(get_sum_async()) == 53
+assert get_sum_sync() == 53
 ```
