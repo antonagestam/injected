@@ -114,14 +114,12 @@ def build_graph(
     bound_arguments.apply_defaults()
 
     graph = Map[Request, Set[Request]]().mutate()
-    requests = frozenset(
-        {
-            value.request
-            for value in bound_arguments.arguments.values()
-            if isinstance(value, Marker)
-            if value.request not in context
-        }
-    )
+    requests = frozenset({
+        value.request
+        for value in bound_arguments.arguments.values()
+        if isinstance(value, Marker)
+        if value.request not in context
+    })
     for nested_request in requests:
         graph.update(build_graph(nested_request, context))
 
@@ -162,12 +160,10 @@ async def resolve[T](
     kwargs: Map[str, object],
 ) -> T:
     request = Request(provider=fn, args=args, kwargs=kwargs)
-    context = Map(
-        {
-            Request(provider=provider, args=(), kwargs=Map()): value
-            for provider, value in seed.items()
-        }
-    )
+    context = Map({
+        Request(provider=provider, args=(), kwargs=Map()): value
+        for provider, value in seed.items()
+    })
 
     # Remember: a single provider can have multiple nodes in the graph, since it shall
     # be called with different arguments as passed.

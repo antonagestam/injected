@@ -1,6 +1,9 @@
 fix = true
 target-version = "py313"
 
+[format]
+preview = true
+
 [lint]
 extend-select = [
   # bugbear
