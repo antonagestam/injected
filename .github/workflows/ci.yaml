@@ -17,7 +17,7 @@ env:
 jobs:
   lint:
     name: Static analysis
-    uses: antonagestam/goose/.github/workflows/run.yaml@0.14.0
+    uses: antonagestam/goose/.github/workflows/run.yaml@0.14.1
 
   check-build:
     name: Check packaging metadata
