@@ -10,7 +10,6 @@ from collections.abc import Set
 from contextlib import AbstractAsyncContextManager
 from contextlib import AbstractContextManager
 from contextlib import AsyncExitStack
-from copy import replace
 from dataclasses import dataclass
 from functools import cache
 from functools import partial
@@ -18,12 +17,17 @@ from functools import wraps
 from graphlib import TopologicalSorter
 from typing import Any
 from typing import Final
+from typing import Generic
 from typing import NoReturn
 from typing import cast
 from typing import final
 from typing import overload
 
 from immutables import Map
+
+# Needed for passing `default` argument.
+from typing_extensions import ParamSpec  # noqa: UP035
+from typing_extensions import TypeVar  # noqa: UP035
 
 
 @final
@@ -42,9 +46,13 @@ class Marker[**P, R]:
         )
 
 
+P = ParamSpec("P", default=Any)
+R = TypeVar("R", default=Any)
+
+
 @final
 @dataclass(frozen=True, slots=True, kw_only=True)
-class Request[**P = Any, R = Any]:
+class Request(Generic[P, R]):
     provider: Callable[P, R]
     args: tuple[object, ...]
     kwargs: Map[str, object]
@@ -142,12 +150,12 @@ def execute_request[T](
             and (context_value := context.get(parameter.default.request, sentinel))
             is not sentinel
         ):
-            params.append(replace(parameter, default=context_value))
+            params.append(parameter.replace(default=context_value))
             continue
 
         params.append(parameter)
 
-    signature = replace(signature, parameters=tuple(params))
+    signature = signature.replace(parameters=tuple(params))
     bound_arguments = signature.bind(*request.args, **request.kwargs)
     bound_arguments.apply_defaults()
     return request.provider(*bound_arguments.args, **bound_arguments.kwargs)
