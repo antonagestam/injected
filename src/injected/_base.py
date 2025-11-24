@@ -45,6 +45,9 @@ class Marker[**P, R]:
             "Marker object does not have a string representation."
         )
 
+    def __bool__(self) -> NoReturn:
+        raise NotImplementedError("Marker object does not have a bool representation.")
+
 
 P = ParamSpec("P", default=Any)
 R = TypeVar("R", default=Any)
