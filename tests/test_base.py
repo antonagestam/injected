@@ -41,6 +41,24 @@ class TestMarker:
         with pytest.raises(NotImplementedError):
             str(marker)
 
+    def test_raises_not_implemented_error_when_cast_to_bool(self):
+        request = Request(provider=lambda: None, args=(), kwargs=Map())
+        marker = Marker(request=request)
+        with pytest.raises(NotImplementedError):
+            bool(marker)
+
+    def test_raises_not_implemented_error_when_used_in_logical_or(self):
+        request = Request(provider=lambda: None, args=(), kwargs=Map())
+        marker = Marker(request=request)
+        with pytest.raises(NotImplementedError):
+            marker or True  # type: ignore[unreachable]  # noqa: B018
+
+    def test_raises_not_implemented_error_when_used_in_logical_and(self):
+        request = Request(provider=lambda: None, args=(), kwargs=Map())
+        marker = Marker(request=request)
+        with pytest.raises(NotImplementedError):
+            marker and True  # type: ignore[unreachable]  # noqa: B018
+
 
 class ContextEvent(enum.Enum):
     setup = enum.auto()
